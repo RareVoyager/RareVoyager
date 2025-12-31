@@ -1,13 +1,25 @@
 # 收集源文件中的cpp和h文件
+#file(GLOB_RECURSE APPLICATION_SOURCES
+#        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.cpp"
+#)
+#file(GLOB_RECURSE APPLICATION_HEADERS
+#        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+#        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.h"
+#)
+
 file(GLOB_RECURSE APPLICATION_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
 )
 file(GLOB_RECURSE APPLICATION_HEADERS
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
-        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
 )
 
+
+if(DEBUG)
+message(${APPLICATION_SOURCES})
+message(${APPLICATION_HEADERS})
+endif ()
 # 打成静态库
 add_library(RareVoyagerLib STATIC
         ${APPLICATION_SOURCES}
@@ -16,10 +28,10 @@ add_library(RareVoyagerLib STATIC
 
 # 添加头文件搜索路径
 target_include_directories(RareVoyagerLib PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_include_directories(RareVoyagerLib PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/private"
+        "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_BINARY_DIR}"
 )
 

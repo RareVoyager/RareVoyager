@@ -6,3 +6,4 @@ add_executable(RareVoyager
         ${EXAMPLE_FILE}
 )
 
+target_link_libraries(RareVoyager PRIVATE RareVoyagerLib)
