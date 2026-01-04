@@ -41,18 +41,14 @@ target_include_directories(RareVoyagerLib PUBLIC
 )
 
 
-set(YAMLCPP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window/yaml-cpp")
-set(YAMLCPP_INCLUDE_DIR "${YAMLCPP_ROOT}/include")
-set(YAMLCPP_LIB_RELEASE "${YAMLCPP_ROOT}/lib/libyaml-cpp.a")
-set(YAMLCPP_LIB_DEBUG   "${YAMLCPP_ROOT}/lib/libyaml-cppd.a") # 按实际名字
+# 1. 告诉 CMake 去哪里找 yaml-cpp 的配置文件
+# 指向 yaml-cpp 的根目录即可，CMake 会自动搜索其下的 lib/cmake 等子目录
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window/yaml-cpp")
 
-add_library(yaml-cpp STATIC IMPORTED GLOBAL)
-set_target_properties(yaml-cpp PROPERTIES
-        IMPORTED_LOCATION_RELEASE "${YAMLCPP_LIB_RELEASE}"
-        IMPORTED_LOCATION_DEBUG   "${YAMLCPP_LIB_DEBUG}"
-        INTERFACE_INCLUDE_DIRECTORIES "${YAMLCPP_INCLUDE_DIR}"
-)
-target_compile_definitions(yaml-cpp INTERFACE YAML_CPP_STATIC_DEFINE)
+# 2. 查找包 (CONFIG 模式)
+# 这会自动处理 include 路径、库路径、Debug/Release 切换，甚至会自动加上 YAML_CPP_STATIC_DEFINE
+find_package(yaml-cpp REQUIRED CONFIG)
 
-#  如果你的 exe 也 include yaml-cpp：用 PUBLIC
-target_link_libraries(RareVoyagerLib PUBLIC yaml-cpp)
+# 3. 链接
+# yaml-cpp::yaml-cpp 是它官方提供的现代 Target 名称
+target_link_libraries(RareVoyagerLib PUBLIC yaml-cpp::yaml-cpp)
