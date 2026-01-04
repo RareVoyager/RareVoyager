@@ -75,6 +75,18 @@ std::string("xxx") \
 #define RAREVOYAGER_LOG_FMT_FATAL(logger, fmt, ...) RAREVOYAGER_LOG_FMT_LEVEL(logger, RareVoyager::LogLevel::FATAL, fmt, __VA_ARGS__)
 
 
+
+/**
+ * @brief 获取主日志器
+ */
+#define RAREVOYAGER_LOG_ROOT() RareVoyager::LoggerMgr::GetInstance()->getRoot()
+
+/**
+ * @brief 获取name的日志器
+ */
+#define RAREVOYAGER_LOG_NAME(name) RareVoyager::LoggerMgr::GetInstance()->getLogger(name)
+
+
 namespace RareVoyager
 {
 
@@ -178,9 +190,7 @@ namespace RareVoyager
 		LogEvent::ptr m_event;
 
 	};
-#pragma endregion LogEvent
-
-
+#pragma endregion LogEventWarp
 
 #pragma region LogFormatter
 	/**
@@ -361,11 +371,15 @@ namespace RareVoyager
 #pragma endregion FileLogAppender
 
 #pragma region LogManager
+	/**
+	 * @brief: 日志管理类，单例模式
+	 */
 	class LogManager
 	{
 		public:
 		LogManager();
 		Logger::ptr getLogger(const std::string& name);
+		Logger::ptr getRoot(){return m_root;}
 	private:
 		void init();
 	private:

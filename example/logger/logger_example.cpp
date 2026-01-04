@@ -1,9 +1,11 @@
+#include "include/config/config.h"
+
 #include <include/logger/logger.h>
 #include <include/util.h>
 
 int main()
 {
-	auto logger = std::make_shared<RareVoyager::Logger>("root");
+	auto logger = RAREVOYAGER_LOG_ROOT();
 	// 添加一个控制台级别日志
 	logger->addAppender(std::make_shared<RareVoyager::StdoutLogAppender>());
 
@@ -19,8 +21,9 @@ int main()
 	// logger->log(RareVoyager::LogLevel::WARN, event);
 
 	// 宏最终拿到了一个 stringstream 对象
-	// RAREVOYAGER_LOG_DEBUG(logger) <<"Error message:";
-	// RAREVOYAGER_LOG_INFO(logger) <<"Info message:" << "hello " << " = " << "world";
+	RAREVOYAGER_LOG_DEBUG(logger) <<"Error message:";
+	RAREVOYAGER_LOG_INFO(logger) <<"Info message:" << "hello " << " = " << "world";
+	RAREVOYAGER_LOG_ERROR(RAREVOYAGER_LOG_ROOT()) << "aaa";
 
 	// --- 场景 2：带整数参数 ---
 	int id = 1001;
@@ -32,5 +35,8 @@ int main()
 	float progress = 55.5f;
 	// 输出: ... Project: RareVoyager, Progress: 55.50%
 	RAREVOYAGER_LOG_FMT_DEBUG(logger, "Project: %s, Progress: %.2f%%", name, progress);
+
+	RareVoyager::ConfigVar<int> config_var("1145",265);
+	RAREVOYAGER_LOG_INFO(RAREVOYAGER_LOG_ROOT()) << config_var.getName();
 	return 0;
 }

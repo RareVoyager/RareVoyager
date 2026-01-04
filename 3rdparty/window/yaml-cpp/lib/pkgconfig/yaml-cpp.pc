@@ -1,0 +1,11 @@
+prefix=D:/3rdparty/yaml-cpp-mingw-static
+exec_prefix=${prefix}
+includedir=D:/3rdparty/yaml-cpp-mingw-static/include
+libdir=D:/3rdparty/yaml-cpp-mingw-static/lib
+
+Name: Yaml-cpp
+Description: A YAML parser and emitter for C++
+Version: 0.8.0
+Requires:
+Libs: -L${libdir} -lyaml-cpp
+Cflags: -I${includedir}

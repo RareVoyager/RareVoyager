@@ -1,13 +1,3 @@
-# 收集源文件中的cpp和h文件
-#file(GLOB_RECURSE APPLICATION_SOURCES
-#        "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.cpp"
-#)
-#file(GLOB_RECURSE APPLICATION_HEADERS
-#        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
-#        "${CMAKE_CURRENT_SOURCE_DIR}/private/*.h"
-#)
-
 file(GLOB_RECURSE APPLICATION_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
 )
@@ -39,20 +29,30 @@ target_include_directories(RareVoyagerLib PRIVATE
 # 步骤: 1.set 三方库的相对路径
 #       2.添加include 路径
 #       3.指定对应的lib库
-#set(FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../3rdparty/windows/ffmpeg")
-#set(FFMPEG_INCLUDE_DIR "${FFMPEG_ROOT}/include")
-#set(FFMPEG_LIB_DIR "${FFMPEG_ROOT}/lib")
-#
-## 添加 FFmpeg 的 include 路径
-#target_include_directories(CamLinker PRIVATE ${FFMPEG_INCLUDE_DIR})
-#
-## 手动指定需要的 FFmpeg 库
-#target_link_libraries(CamLinker PRIVATE
-#        ${FFMPEG_LIB_DIR}/avcodec.lib
-#        ${FFMPEG_LIB_DIR}/avformat.lib
-#        ${FFMPEG_LIB_DIR}/avutil.lib
-#        ${FFMPEG_LIB_DIR}/swscale.lib
-#        ${FFMPEG_LIB_DIR}/swresample.lib
-#        ${FFMPEG_LIB_DIR}/avdevice.lib
-#        ${FFMPEG_LIB_DIR}/avfilter.lib
-#)
+set(Boost_NO_BOOST_CMAKE ON)
+# 设置 Boost 根目录，FindBoost 会根据这个自动推导 include 和 lib 路径
+set(BOOST_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window/boost")
+set(BOOST_INCLUDE_DIR "${BOOST_ROOT}/include/boost-1_90")
+
+set(Boost_USE_STATIC_LIBS ON)
+
+target_include_directories(RareVoyagerLib PUBLIC
+        "${BOOST_INCLUDE_DIR}"
+)
+
+
+set(YAMLCPP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window/yaml-cpp")
+set(YAMLCPP_INCLUDE_DIR "${YAMLCPP_ROOT}/include")
+set(YAMLCPP_LIB_RELEASE "${YAMLCPP_ROOT}/lib/libyaml-cpp.a")
+set(YAMLCPP_LIB_DEBUG   "${YAMLCPP_ROOT}/lib/libyaml-cppd.a") # 按实际名字
+
+add_library(yaml-cpp STATIC IMPORTED GLOBAL)
+set_target_properties(yaml-cpp PROPERTIES
+        IMPORTED_LOCATION_RELEASE "${YAMLCPP_LIB_RELEASE}"
+        IMPORTED_LOCATION_DEBUG   "${YAMLCPP_LIB_DEBUG}"
+        INTERFACE_INCLUDE_DIRECTORIES "${YAMLCPP_INCLUDE_DIR}"
+)
+target_compile_definitions(yaml-cpp INTERFACE YAML_CPP_STATIC_DEFINE)
+
+#  如果你的 exe 也 include yaml-cpp：用 PUBLIC
+target_link_libraries(RareVoyagerLib PUBLIC yaml-cpp)

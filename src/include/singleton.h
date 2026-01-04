@@ -13,6 +13,11 @@
 
 namespace RareVoyager
 {
+	/**
+	 * TODO: 重新理解下这里的单例模式
+	 * @tparam X 为了创造多个实例对应的Tag
+	 * @tparam N 同一个Tag创造多个实例索引
+	 */
 	template<typename T,class X = void,int N = 0>
 	class Singleton
 	{
