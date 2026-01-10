@@ -10,7 +10,11 @@
 #ifndef RAREVOYAGER_LOGGER_H
 #define RAREVOYAGER_LOGGER_H
 
-#include <cstdint>
+#ifdef ERROR
+#  undef ERROR
+#endif
+
+
 #include <fstream>
 #include <list>
 #include <memory>
@@ -20,8 +24,9 @@
 #include <map>
 #include <mutex>
 
-
 #include <include/singleton.h>
+#include <include/thread/mutex.h>
+
 #define RUNKONW RareVoyager::LogLevel::Level::UNKNOW
 #define RDEBUG RareVoyager::LogLevel::Level::DEBUG
 #define RINFO RareVoyager::LogLevel::Level::INFO
@@ -75,7 +80,6 @@ std::string("xxx") \
 #define RAREVOYAGER_LOG_FMT_FATAL(logger, fmt, ...) RAREVOYAGER_LOG_FMT_LEVEL(logger, RareVoyager::LogLevel::FATAL, fmt, __VA_ARGS__)
 
 
-
 /**
  * @brief 获取主日志器
  */
@@ -91,6 +95,7 @@ namespace RareVoyager
 {
 
 	class Logger;
+	class LoggerManager;
 #pragma region LogLevel
 	/**
 	 * @brief: 日志等级
@@ -100,7 +105,7 @@ namespace RareVoyager
 	public:
 		enum Level
 		{
-			UNKONW = 0,// 未知等级
+			UNKNOW = 0,// 未知等级
 			DEBUG = 1,// Debug级别日志
 			INFO = 2,// Info级别日志
 			WARN = 3,// Warn级别日志
@@ -114,6 +119,8 @@ namespace RareVoyager
 		 * @return
 		 */
 		const static char* ToString(Level level);
+
+		static Level FromString(const std::string& str);
 	};
 #pragma endregion LogLevel
 
@@ -136,8 +143,8 @@ namespace RareVoyager
 		 * @param time 时间
 		 * @param threadname 线程名称
 		 */
-		LogEvent(const char* file,LogLevel::Level level, int32_t line, uint32_t elapse
-		         , uint32_t threadId, uint32_t fiberId,std::shared_ptr<Logger> logger,
+		LogEvent(const char* file, LogLevel::Level level, int32_t line, uint32_t elapse
+		         , uint32_t threadId, uint32_t fiberId, std::shared_ptr<Logger> logger,
 		         uint32_t time, std::string threadname);
 
 		// 下面是一些FormatterItem 会用到的方法。访问级别为public
@@ -148,7 +155,7 @@ namespace RareVoyager
 		[[nodiscard]] uint32_t getFiberId() const { return m_fiberId; }
 		[[nodiscard]] uint64_t getTime() const { return m_time; }
 		[[nodiscard]] std::string getContent() const { return m_ss.str(); }
-		[[nodiscard]]  std::stringstream& getSS() { return m_ss; }
+		[[nodiscard]] std::stringstream& getSS() { return m_ss; }
 		[[nodiscard]] const std::string& getThreadName() const { return m_threadName; }
 		[[nodiscard]] std::shared_ptr<Logger> getLogger() const { return m_logger; }
 		[[nodiscard]] LogLevel::Level getLevel() const { return m_level; }
@@ -182,10 +189,12 @@ namespace RareVoyager
 	{
 	public:
 		LogEventWarp(LogEvent::ptr e);
+
 		~LogEventWarp();
 
-		[[nodiscard]]  std::stringstream& getSS() {return m_event->getSS();}
-		LogEvent::ptr getEvent() const { return m_event;}
+		[[nodiscard]] std::stringstream& getSS() { return m_event->getSS(); }
+		LogEvent::ptr getEvent() const { return m_event; }
+
 	private:
 		LogEvent::ptr m_event;
 
@@ -216,7 +225,9 @@ namespace RareVoyager
 		 * @param[in] event 日志事件
 		 */
 		std::string format(const std::shared_ptr<Logger>& logger, LogLevel::Level level, const LogEvent::ptr& event);
+		const std::string getPattern() const { return m_pattern;}
 
+		void setFormatter(const std::string& val);
 	public:
 		/**
 		 * @brief: 输出信息基类。对应着LogEvent里面的私有字段
@@ -237,8 +248,7 @@ namespace RareVoyager
 			 * @param[in] level 日志等级
 			 * @param[in] event 日志事件
 			 */
-			virtual void format(std::ostream& os, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event);
-
+			virtual void format(std::ostream& os, std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event){}
 		};
 
 		/**
@@ -249,12 +259,15 @@ namespace RareVoyager
 		// TODO: 优化解析流程。原解析流程繁琐复杂。
 		void init();
 
+		bool isError() { return m_error; }
+
 	private:
 		/// 日志格式模板
 		std::string m_pattern;
 		/// 日志格式解析后格式
-		/// TODO: 没有搞明白init最后是如何写入这些信息的。
 		std::vector<FormatItem::ptr> m_items;
+		///
+		bool m_error = false;
 	};
 #pragma endregion LogFormatter
 
@@ -284,11 +297,19 @@ namespace RareVoyager
 		 */
 		virtual void setFormatter(LogFormatter::ptr formatter);
 
-	protected:
+		virtual void setLevel(LogLevel::Level level);
+
+		virtual std::string toYamlString() = 0;
+
+	public:
 		// 日志等级
 		LogLevel::Level m_level = LogLevel::DEBUG;
 		// 格式化日志工具
 		LogFormatter::ptr m_formatter;
+		/// 是否有自己的日志格式器
+		bool m_hasFormatter = false;
+
+		Mutex m_mutex;
 	};
 #pragma endregion LogAppender
 
@@ -325,13 +346,26 @@ namespace RareVoyager
 
 		void delAppender(const LogAppender::ptr& appender);
 
+		void clearAppenders();
+
+		void setFormatter(LogFormatter::ptr val);
+
+		void setFormatter(const std::string& val);
+
+		LogFormatter::ptr getFormatter();
+
 		[[nodiscard]] std::string getName() const { return m_name; }
 
-	public:
+		std::string toYamlString();
+
+	private:
 		std::string m_name;// 日志名称
 		LogLevel::Level m_level;// 日志级别
 		std::list<LogAppender::ptr> m_appenders;// Appender集合
 		LogFormatter::ptr m_formatter;
+		ptr m_root;
+
+		Mutex m_mutex;
 	};
 #pragma endregion Logger
 
@@ -343,6 +377,8 @@ namespace RareVoyager
 		typedef std::shared_ptr<StdoutLogAppender> ptr;
 
 		void log(std::shared_ptr<Logger> ptr, LogLevel::Level level, LogEvent::ptr event) override;
+
+		std::string toYamlString() override;
 	};
 #pragma endregion StdoutLogAppender
 
@@ -353,9 +389,11 @@ namespace RareVoyager
 	public:
 		typedef std::shared_ptr<FileLogAppender> ptr;
 
-		FileLogAppender(LogLevel::Level level,const std::string& filename);
+		FileLogAppender(const std::string& filename);
 
 		void log(std::shared_ptr<Logger> ptr, LogLevel::Level level, LogEvent::ptr event) override;
+
+		std::string toYamlString() override;
 
 		/**
 		 * TODO: 未来给出C++ 17及以上的特化版本
@@ -364,7 +402,7 @@ namespace RareVoyager
 		bool reopen();
 
 	private:
-		std::mutex m_mutex;
+		uint64_t m_lastTime;
 		std::string m_filename;// 文件名
 		std::ofstream m_fileStream;// 文件写入流
 	};
@@ -376,17 +414,25 @@ namespace RareVoyager
 	 */
 	class LogManager
 	{
-		public:
+	public:
 		LogManager();
+
 		Logger::ptr getLogger(const std::string& name);
-		Logger::ptr getRoot(){return m_root;}
+
+		Logger::ptr getRoot() { return m_root; }
+
+		std::string toYamlString();
 	private:
 		void init();
+
 	private:
-		std::map<std::string,Logger::ptr> m_loggers;
+		std::map<std::string, Logger::ptr> m_loggers;
+		// 默认日志器，添加了一个向控制台输出的方法。
 		Logger::ptr m_root;
+		Mutex m_mutex;
 	};
 
+	// 使用模板类实现的单例模式
 	typedef Singleton<LogManager> LoggerMgr;
 #pragma endregion LogManager
 }

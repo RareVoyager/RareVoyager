@@ -43,7 +43,7 @@ target_include_directories(RareVoyagerLib PUBLIC
 
 # 1. 告诉 CMake 去哪里找 yaml-cpp 的配置文件
 # 指向 yaml-cpp 的根目录即可，CMake 会自动搜索其下的 lib/cmake 等子目录
-list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window/yaml-cpp")
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/window")
 
 # 2. 查找包 (CONFIG 模式)
 # 这会自动处理 include 路径、库路径、Debug/Release 切换，甚至会自动加上 YAML_CPP_STATIC_DEFINE

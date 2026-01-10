@@ -6,6 +6,7 @@
 #include <sstream>
 #include <utility>
 
+#include <yaml-cpp/yaml.h>
 #if __cplusplus >= 202002L
 #include <chrono>
 #include <format>
@@ -18,6 +19,8 @@
 namespace fs = std::filesystem;
 #endif
 #include <include/logger/logger.h>
+#include <include/config/config.h>
+
 
 namespace RareVoyager
 {
@@ -38,14 +41,19 @@ namespace RareVoyager
 	}
 
 	// 把可变参数（...）收集起来，交给真正的实现函数。
+	/**
+	 * @brief: 实现了一个类似printf的打印方法
+	 * @param fmt
+	 * @param ...
+	 */
 	void LogEvent::format(const char* fmt, ...)
 	{
 		// 用来保存所有 ... 里的参数
 		va_list al;
 		// 告诉编译器 fmt后面全是 可变参数
-		va_start(al,fmt);
+		va_start(al, fmt);
 		// 具体方法
-		format(fmt,al);
+		format(fmt, al);
 		// 结束可变参数访问
 		va_end(al);
 	}
@@ -75,7 +83,8 @@ namespace RareVoyager
 		va_end(al_copy2);
 
 		// 写入日志缓冲区
-		if (written > 0) {
+		if (written > 0)
+		{
 			m_ss.write(buf.data(), written);
 		}
 
@@ -84,7 +93,8 @@ namespace RareVoyager
 		char* buf = nullptr;
 		// 获取字符数量
 		int len = vasprintf(&buf, fmt, al);
-		if(len != -1) {
+		if (len != -1)
+		{
 			m_ss << std::string(buf, len);
 			free(buf);
 		}
@@ -206,14 +216,9 @@ namespace RareVoyager
 		void format(std::ostream& os, Logger::ptr logger, LogLevel::Level level, LogEvent::ptr event) override
 		{
 #if __cplusplus < 202002L
-			// C++20 可以使用chrono库来避免这种定义
 			time_t t = event->getTime();
-			// 从 1970-01-01 00:00:00 UTC 起到现在经过的秒数
-			// 本身只是一个描述时间经过的量
-			struct tm tm_time;
-			// 将时间戳t 转换为具体当前时间,写入到tm结构体中
-#if defined(_WIN32)
-			// Windows：线程安全版本
+			tm tm_time;
+#if defined(_WIN32) // windows 线程安全版本
 			localtime_s(&tm_time, &t);
 #else
 			// Linux / macOS：POSIX 版本
@@ -310,7 +315,6 @@ namespace RareVoyager
 #pragma endregion FormatItem
 
 #pragma region  LogLevel
-	// TODO: X-Macro 优化
 	const char* LogLevel::ToString(LogLevel::Level level)
 	{
 		switch (level)
@@ -330,6 +334,23 @@ namespace RareVoyager
 		}
 	}
 
+	LogLevel::Level LogLevel::FromString(const std::string& str)
+	{
+#define XX(name) \
+		if (str ==  #name) {\
+			return LogLevel::name;\
+	}
+		XX(DEBUG);
+		XX(INFO);
+		XX(WARN);
+		XX(ERROR);
+		XX(FATAL);
+#undef XX
+		return LogLevel::UNKNOW;
+	}
+#pragma endregion LogLevel
+
+#pragma region LogFormatter
 	LogFormatter::LogFormatter(std::string pattern) : m_pattern(std::move(pattern))
 	{
 		init();
@@ -347,13 +368,9 @@ namespace RareVoyager
 		return ss.str();
 	}
 
-
-#pragma endregion LogLevel
-
-#pragma region LogFormatter
-	void LogFormatter::FormatItem::format(std::ostream& os, std::shared_ptr<Logger> logger, LogLevel::Level level,
-	                                      LogEvent::ptr event)
+	void LogFormatter::setFormatter(const std::string& val)
 	{
+		m_pattern = val;
 	}
 
 	// 日志格式解析
@@ -415,6 +432,7 @@ namespace RareVoyager
 			{
 				// 解析错误：只有 '{' 没有 '}'
 				str = "<<error>>";
+				m_error = true;
 			}
 
 			// 写入普通文本
@@ -451,13 +469,6 @@ namespace RareVoyager
 				XX(N, ThreadNameFormatItem),
 #undef XX
 		};
-
-		// for (auto& [value,value2,a] : vec)
-		// {
-		// 	std::cout <<value << " " << value2 << " " << a << std::endl;
-		// }
-		// std::cout << std::endl;
-
 		// TODO:
 		for (auto& i: vec)
 		{
@@ -481,6 +492,12 @@ namespace RareVoyager
 		}
 	}
 
+	LogFormatter::ptr LogAppender::getFormatter()
+	{
+		Mutex::Lock lock(&m_mutex);
+		return m_formatter;
+	}
+
 
 #pragma endregion LogFormatter
 
@@ -495,8 +512,10 @@ namespace RareVoyager
 
 	void Logger::addAppender(const LogAppender::ptr& appender)
 	{
+		Mutex::Lock lock(&m_mutex);
 		if (!appender->getFormatter())
 		{
+			Mutex::Lock ll(&appender->m_mutex);
 			appender->setFormatter(m_formatter);
 		}
 		m_appenders.emplace_back(appender);
@@ -504,6 +523,7 @@ namespace RareVoyager
 
 	void Logger::delAppender(const LogAppender::ptr& appender)
 	{
+		Mutex::Lock lock(&m_mutex);
 		for (auto it = m_appenders.begin(); it != m_appenders.end(); ++it)
 		{
 			if (*it == appender)
@@ -514,6 +534,67 @@ namespace RareVoyager
 		}
 	}
 
+	void Logger::clearAppenders()
+	{
+		Mutex::Lock lock(&m_mutex);
+		m_appenders.clear();
+	}
+
+	void Logger::setFormatter(LogFormatter::ptr val)
+	{
+		// MutexType::Lock lock(m_mutex);
+		m_formatter = val;
+
+		for (auto& i: m_appenders)
+		{
+			// MutexType::Lock ll(i->m_mutex);
+			if (!i->m_hasFormatter)
+			{
+				i->m_formatter = m_formatter;
+			}
+		}
+	}
+
+	void Logger::setFormatter(const std::string& val)
+	{
+		Mutex::Lock lock(&m_mutex);
+		LogFormatter::ptr new_val(new LogFormatter(val));
+		if (new_val->isError())
+		{
+			std::cout << "Logger setFormatter name=" << m_name
+					<< " value=" << val << " invalid formatter"
+					<< std::endl;
+			return;
+		}
+		//m_formatter = new_val;
+		setFormatter(new_val);
+	}
+
+	LogFormatter::ptr Logger::getFormatter()
+	{
+		return m_formatter;
+	}
+
+	std::string Logger::toYamlString() {
+		Mutex::Lock lock(&m_mutex);
+		YAML::Node node;
+		node["name"] = m_name;
+		if(m_level != LogLevel::UNKNOW) {
+			node["level"] = LogLevel::ToString(m_level);
+		}
+		if(m_formatter) {
+			node["formatter"] = m_formatter->getPattern();
+		}
+
+		for(auto& i : m_appenders) {
+			node["appenders"].push_back(YAML::Load(i->toYamlString()));
+		}
+		std::stringstream ss;
+		ss << node;
+		return ss.str();
+	}
+
+
 	void Logger::log(LogLevel::Level level, const LogEvent::ptr& event)
 	{
 		// 过滤低级日志
@@ -522,7 +603,7 @@ namespace RareVoyager
 			// shared_from_this() 与当前对象 共享同一个引用计数控制块
 			// 防止自身被多次引用造成的严重错误如 多次delete
 			auto self = shared_from_this();
-			// MutexType::Lock lock(m_mutex);
+			Mutex::Lock lock(&m_mutex);
 			if (!m_appenders.empty())
 			{
 				for (auto& i: m_appenders)
@@ -530,9 +611,10 @@ namespace RareVoyager
 					i->log(self, level, event);
 				}
 			}
-			// else if(m_root) {
-			//     m_root->log(level, event);
-			// }
+			else if (m_root)
+			{
+				m_root->log(level, event);
+			}
 		}
 	}
 
@@ -580,57 +662,105 @@ namespace RareVoyager
 		// 为了实现日志过滤
 		if (level >= m_level)
 		{
-			// TODO: 加锁
+			Mutex::Lock lock(&m_mutex);
 			// 循环遍历m_items 输出完整日志信息
 			std::cout << m_formatter->format(logger, level, event);
 		}
 	}
 
-	FileLogAppender::FileLogAppender(LogLevel::Level level,const std::string& filename="")
+	std::string StdoutLogAppender::toYamlString() {
+		// MutexType::Lock lock(m_mutex);
+		YAML::Node node;
+		node["type"] = "StdoutLogAppender";
+		if(m_level != LogLevel::UNKNOW) {
+			node["level"] = LogLevel::ToString(m_level);
+		}
+		if(m_hasFormatter && m_formatter) {
+			node["formatter"] = m_formatter->getPattern();
+		}
+		std::stringstream ss;
+		ss << node;
+		return ss.str();
+	}
+
+	FileLogAppender::FileLogAppender(const std::string& filename)
+		: m_filename(filename)
 	{
-		m_level = level;
-		m_filename = filename + LogLevel::ToString(level);
 		reopen();
 	}
 
 	void FileLogAppender::log(std::shared_ptr<Logger> logger, LogLevel::Level level, LogEvent::ptr event)
 	{
-		if (level < m_level) return;
+		if (level >= m_level)
+		{
+			uint64_t now = time(0);
+			if (now != m_lastTime)
+			{
+				reopen();
+				m_lastTime = now;
+			}
+			Mutex::Lock lock(&m_mutex);
+			m_fileStream << m_formatter->format(logger, level, event);
+		}
 
-		const std::string text = m_formatter->format(logger, level, event);
+	}
 
-		std::lock_guard<std::mutex> lock(m_mutex);
-		m_fileStream << text;
+	std::string FileLogAppender::toYamlString() {
+		Mutex::Lock lock(&m_mutex);
+		YAML::Node node;
+		node["type"] = "FileLogAppender";
+		node["file"] = m_filename;
+		if(m_level != LogLevel::UNKNOW) {
+			node["level"] = LogLevel::ToString(m_level);
+		}
+		if(m_hasFormatter && m_formatter) {
+			node["formatter"] = m_formatter->getPattern();
+		}
+		std::stringstream ss;
+		ss << node;
+		return ss.str();
 	}
 
 	bool FileLogAppender::reopen()
 	{
+		Mutex::Lock lock(&m_mutex);
 		if (m_fileStream)
 		{
 			m_fileStream.close();
 		}
-		m_fileStream.open(m_filename,std::ios::app);
+		m_fileStream.open(m_filename, std::ios::app);
 		return m_fileStream.is_open();
-	}
-
-	LogFormatter::ptr LogAppender::getFormatter()
-	{
-		return m_formatter;
 	}
 
 	void LogAppender::setFormatter(LogFormatter::ptr formatter)
 	{
+		Mutex::Lock lock(&m_mutex);
 		m_formatter = std::move(formatter);
+		if (m_formatter)
+		{
+			m_hasFormatter = true;
+		}
+		else
+		{
+			m_hasFormatter = false;
+		}
+	}
+
+	void LogAppender::setLevel(LogLevel::Level level)
+	{
+		m_level = level;
 	}
 
 #pragma endregion LogAppender
 
 #pragma region LogEventWarp
-	LogEventWarp::LogEventWarp(LogEvent::ptr e):m_event(std::move(e)){}
+	LogEventWarp::LogEventWarp(LogEvent::ptr e) : m_event(std::move(e))
+	{
+	}
 
 	LogEventWarp::~LogEventWarp()
 	{
-		m_event->getLogger()->log(m_event->getLevel(),m_event);
+		m_event->getLogger()->log(m_event->getLevel(), m_event);
 	}
 
 #pragma endregion LogEventWarp
@@ -646,7 +776,9 @@ namespace RareVoyager
 
 	Logger::ptr LogManager::getLogger(const std::string& name)
 	{
+		Mutex::Lock lock(&m_mutex);
 		auto it = m_loggers.find(name);
+		// 找到了对应的logger
 		if (it != m_loggers.end())
 		{
 			return it->second;
@@ -657,9 +789,282 @@ namespace RareVoyager
 		return logger;
 	}
 
+	std::string LogManager::toYamlString()
+	{
+		Mutex::Lock lock(&m_mutex);
+		YAML::Node node;
+		for (auto& i: m_loggers)
+		{
+			node.push_back(YAML::Load(i.second->toYamlString()));
+		}
+		std::stringstream ss;
+		ss << node;
+		return ss.str();
+	}
+
 	void LogManager::init()
 	{
 	}
 
 #pragma endregion LogManager
+
+#pragma region LogDefine
+
+	struct LogAppenderDefine
+	{
+		int type = 0;//1 File, 2 Stdout
+		LogLevel::Level level = LogLevel::UNKNOW;
+		std::string formatter;
+		std::string file;
+
+		bool operator==(const LogAppenderDefine& oth) const
+		{
+			return type == oth.type
+			       && level == oth.level
+			       && formatter == oth.formatter
+			       && file == oth.file;
+		}
+	};
+
+	// 配置文件使用的日志相关信息结构体
+	struct LogDefine
+	{
+		// 日志文件名
+		std::string name;
+		// 日志等级
+		LogLevel::Level level = LogLevel::UNKNOW;
+		// 日志格式
+		std::string formatter;
+		// 日志输出器
+		std::vector<LogAppenderDefine> appenders;
+
+		// 重载了 == 运算符
+		bool operator==(const LogDefine& oth) const
+		{
+			return name == oth.name
+			       && level == oth.level
+			       && formatter == oth.formatter
+			       && appenders == appenders;
+		}
+
+		// 重载了 < 运算符，用在set比较
+		bool operator<(const LogDefine& oth) const
+		{
+			return name < oth.name;
+		}
+
+		// 是否有效
+		bool isValid() const
+		{
+			return !name.empty();
+		}
+	};
+
+	// 偏特化
+	template<>
+	class LexicalCast<std::string, LogDefine>
+	{
+	public:
+		LogDefine operator()(const std::string& v)
+		{
+			YAML::Node n = YAML::Load(v);
+			LogDefine ld;
+			if (!n["name"].IsDefined())
+			{
+				std::cout << "log config error: name is null, " << n
+						<< std::endl;
+				throw std::logic_error("log config name is null");
+			}
+			ld.name = n["name"].as<std::string>();
+			ld.level = LogLevel::FromString(n["level"].IsDefined() ? n["level"].as<std::string>() : "");
+			if (n["formatter"].IsDefined())
+			{
+				ld.formatter = n["formatter"].as<std::string>();
+			}
+
+			if (n["appenders"].IsDefined())
+			{
+				//std::cout << "==" << ld.name << " = " << n["appenders"].size() << std::endl;
+				for (size_t x = 0; x < n["appenders"].size(); ++x)
+				{
+					auto a = n["appenders"][x];
+					if (!a["type"].IsDefined())
+					{
+						std::cout << "log config error: appender type is null, " << a
+								<< std::endl;
+						continue;
+					}
+					std::string type = a["type"].as<std::string>();
+					LogAppenderDefine lad;
+					if (type == "FileLogAppender")
+					{
+						lad.type = 1;
+						if (!a["file"].IsDefined())
+						{
+							std::cout << "log config error: fileappender file is null, " << a
+									<< std::endl;
+							continue;
+						}
+						lad.file = a["file"].as<std::string>();
+						if (a["formatter"].IsDefined())
+						{
+							lad.formatter = a["formatter"].as<std::string>();
+						}
+					}
+					else if (type == "StdoutLogAppender")
+					{
+						lad.type = 2;
+						if (a["formatter"].IsDefined())
+						{
+							lad.formatter = a["formatter"].as<std::string>();
+						}
+					}
+					else
+					{
+						std::cout << "log config error: appender type is invalid, " << a
+								<< std::endl;
+						continue;
+					}
+
+					ld.appenders.push_back(lad);
+				}
+			}
+			return ld;
+		}
+	};
+
+	template<>
+	class LexicalCast<LogDefine, std::string>
+	{
+	public:
+		std::string operator()(const LogDefine& i)
+		{
+			YAML::Node n;
+			n["name"] = i.name;
+			if (i.level != LogLevel::UNKNOW)
+			{
+				n["level"] = LogLevel::ToString(i.level);
+			}
+			if (!i.formatter.empty())
+			{
+				n["formatter"] = i.formatter;
+			}
+
+			for (auto& a: i.appenders)
+			{
+				YAML::Node na;
+				if (a.type == 1)
+				{
+					na["type"] = "FileLogAppender";
+					na["file"] = a.file;
+				}
+				else if (a.type == 2)
+				{
+					na["type"] = "StdoutLogAppender";
+				}
+				if (a.level != LogLevel::UNKNOW)
+				{
+					na["level"] = LogLevel::ToString(a.level);
+				}
+
+				if (!a.formatter.empty())
+				{
+					na["formatter"] = a.formatter;
+				}
+
+				n["appenders"].push_back(na);
+			}
+			std::stringstream ss;
+			ss << n;
+			return ss.str();
+		}
+	};
+
+	auto g_log_defines = RareVoyager::Config::Lookup("logs", std::set<LogDefine>(), "logs config");
+
+	/**
+	 * @brief :给“日志配置项”注册一个监听器：只要配置发生变化，就自动创建/更新/删除 Logger，
+	 * 并按新配置重建它的 Appender（输出目标）、等级、格式器
+	 */
+	struct LogIniter
+	{
+		LogIniter()
+		{
+			/**
+			 * @param: old_value 旧的日志配置集合
+			 * @param: new_value 新的日志配置集合
+			 */
+			g_log_defines->addListener(	[](const std::set<LogDefine>& old_value,
+			                                        const std::set<LogDefine>& new_value) {
+				RAREVOYAGER_LOG_INFO(RAREVOYAGER_LOG_ROOT()) << "on_logger_conf_changed";
+
+				// 处理新增 和 修改
+				for (auto& i: new_value)
+				{
+					// 从旧配置里面找新的配置，如果没有则新增。如果有并且不
+					auto it = old_value.find(i);
+					Logger::ptr logger;
+					// 处理新增和修改
+					if (it == old_value.end() || !(*it == i))
+					{
+						logger = RAREVOYAGER_LOG_NAME(i.name);
+					}
+					logger->setLevel(i.level);
+
+					// 如果输出格式为空
+					if (!i.formatter.empty())
+					{
+						logger->setFormatter(i.formatter);
+					}
+
+					logger->clearAppenders();
+					// type == 1 是文件
+					// type == 2 是控制台
+					for (auto& a: i.appenders)
+					{
+						LogAppender::ptr ap;
+						if (a.type == 1)
+						{
+							ap.reset(new FileLogAppender(a.file));
+						}
+						else if (a.type == 2)
+						{
+							ap.reset(new StdoutLogAppender);
+						}
+						ap->setLevel(a.level);
+						if (!a.formatter.empty())
+						{
+							LogFormatter::ptr fmt(new LogFormatter(a.formatter));
+							if (!fmt->isError())
+							{
+								ap->setFormatter(fmt);
+							}
+							else
+							{
+								std::cout << "log.name=" << i.name << " appender type=" << a.type
+										<< " formatter=" << a.formatter << " is invalid" << std::endl;
+							}
+						}
+						logger->addAppender(ap);
+					}
+				}
+
+				for (auto& i: old_value)
+				{
+					auto it = new_value.find(i);
+					// 如果在新的LogDefine 集合里面没有找到，就删除
+					if (it == new_value.end())
+					{
+						//删除logger
+						auto logger = RAREVOYAGER_LOG_NAME(i.name);
+						logger->setLevel((LogLevel::Level)0);
+						logger->clearAppenders();
+					}
+				}
+			});
+		}
+	};
+
+	static LogIniter __log_init;
+#pragma endregion LogDefine
 }
