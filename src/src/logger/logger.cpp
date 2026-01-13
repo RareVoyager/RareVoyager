@@ -516,7 +516,15 @@ namespace RareVoyager
 		if (!appender->getFormatter())
 		{
 			Mutex::Lock ll(&appender->m_mutex);
-			appender->setFormatter(m_formatter);
+			appender->m_formatter = m_formatter;
+			if (appender->m_formatter)
+			{
+				appender->m_hasFormatter = true;
+			}
+			else
+			{
+				appender->m_hasFormatter = false;
+			}
 		}
 		m_appenders.emplace_back(appender);
 	}

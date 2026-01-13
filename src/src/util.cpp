@@ -1,10 +1,13 @@
 #include <include/util.h>
 
+#include "include/logger/logger.h"
+
 #include <pthread.h>
 
-
+#include <assert.h>
 #if defined(_WIN32)
 #include <windows.h>
+#include <dbghelp.h>
 #elif defined(__APPLE__)
 #include <pthread.h>
 #include <sys/types.h>
@@ -12,6 +15,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <backtrace.h>
 #endif
 namespace RareVoyager
 {
@@ -47,5 +51,27 @@ namespace RareVoyager
 		char buf[64] = {0};
 		strftime(buf, sizeof(buf), "%Y-%m-%d", &tm_time);
 		return std::string(buf);
+	}
+
+	void Backtrace(std::vector<std::string>& bt, int size, int skip)
+	{
+#if defined(_WIN32)
+
+#elif defined(__LINUX__)
+		void **array = (void **)malloc(size * sizeof(void *));
+		size_t s = ::backtrace(array,size);
+		char** strings = backtrace_symbols(array,s);
+		if (strings == NULL)
+		{
+			RAREVOYAGER_LOG_INFO(RAREVOYAGER_LOG_ROOT()) << "Backtrace allocation failed";
+			return;
+		}
+		for (size_t i = skip; i < s; ++i)
+		{
+			bt.push_back(strings[i]);
+		}
+		free(array);
+		free(strings);
+#endif
 	}
 }

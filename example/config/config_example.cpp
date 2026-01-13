@@ -2,7 +2,7 @@
 
 #include <include/logger/logger.h>
 #include <include/config/config.h>
-
+#include <include/boost/context/fiber.hpp>
 // 定义配置项
 // RareVoyager::ConfigVar<int>::ptr g_int_value_config =
 // 	RareVoyager::Config::Lookup("system.port", (int)8080, "system port");

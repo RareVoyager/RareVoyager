@@ -11,6 +11,7 @@
 #define RAREVOYAGER_UTIL_H
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <sys/types.h>
 
 
@@ -24,6 +25,11 @@ namespace RareVoyager
 
 	// 获取当前时间字符串
 	std::string GetCurrentDateStr();
+
+	// 断言信息assert
+	void Backtrace(std::vector<std::string>& bt,int size ,int skip = 1);
+
+	std::string BacktraceToString(int size,int skip =2,const std::string& prefix = "");
 }
 
 #endif //RAREVOYAGER_UTIL_H

@@ -12,7 +12,7 @@ void func1()
 												 << "this.name = " << RareVoyager::Thread::GetThis()->GetName()<< std::endl
 												 << "id = " << RareVoyager::getThreadPid()<< std::endl
 												 << "this.id = " << RareVoyager::Thread::GetThis()->getId();
-	for (int i = 0; i < 10000000; i++)
+	for (int i = 0; i < 1000000; i++)
 	{
 		RareVoyager::Mutex::Lock lock(&mutex);
 		++count;

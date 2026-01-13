@@ -19,12 +19,10 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <boost/lexical_cast.hpp>
 #include <yaml-cpp/yaml.h>
-
 #include <include/util.h>
 #include <include/logger/logger.h>
-
+#include <boost/lexical_cast.hpp>
 
 /**
  * 原则: 约定优于配置
